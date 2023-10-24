@@ -1,4 +1,27 @@
 ![QBRC logo](assets/qbrc.jpeg)
+
+```bash
+poetry export -f requirements.txt --output requirements.txt --without-hashes --without-urls --without=torch
+docker build -t hd_wsi . && rm requirements.txt
+
+docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) -w $PWD --gpus all hd_wsi bash
+
+docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus all hd_wsi wsi \
+  --data_path /NAS/yzy/project/tcga_luad_svs/0b3cff7b-bbe2-40ab-aee6-cb0554940eaa/TCGA-05-4244-01Z-00-DX1.d4ff32cd-38cf-40ea-8213-45c2b100ac01.svs \
+  --model $PWD/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
+   --output_dir $PWD/test_wsi \
+  --save_csv --batch_size 4 --num_workers 38 --max_memory 10000
+```
+
+
+```python
+from tifffile import TiffFile
+
+img_file = "/NAS/yzy/project/tcga_luad_svs/0b3cff7b-bbe2-40ab-aee6-cb0554940eaa/TCGA-05-4244-01Z-00-DX1.d4ff32cd-38cf-40ea-8213-45c2b100ac01.svs"
+with open(img_file, 'rb') as fp:
+    slide = TiffFile(fp)
+```
+
 # Histological Based Nuclei Segmentation and Tumor Microenvironment Characterization Pipeline
 
 

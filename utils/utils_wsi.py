@@ -1,12 +1,12 @@
 import os
-import sys
 import math
-import time
-import random
 import pickle
 import numbers
 import skimage
 import datetime
+
+
+import cv2
 
 import torch
 import torch.nn.functional as F
@@ -15,16 +15,14 @@ import torchvision.transforms as T
 from collections import defaultdict
 from torchvision.models.detection.roi_heads import paste_masks_in_image
 
-import cv2
 import numpy as np
 import pandas as pd
-import multiprocessing as mp
 
 import matplotlib
 import tifffile
 from collections import deque
 from matplotlib import pyplot as plt
-from .utils_image import Slide, get_dzi, img_as, pad, Mask, overlay_detections
+from .utils_image import get_dzi, img_as, pad, Mask, overlay_detections
 
 
 TO_REMOVE = 1
@@ -41,7 +39,9 @@ def load_cfg(cfg):
     return yaml
 
 
-def load_hdyolo_model(model_path, nms_params={}):
+def load_hdyolo_model(model_path, nms_params=None):
+    if nms_params is None:
+        nms_params = {}
     model = torch.jit.load(model_path, map_location='cpu')
     model.eval()
     # update nms_params based on config file
@@ -322,7 +322,9 @@ def batch_inference(model, images, patch_infos, input_size, compute_masks=True,
         inputs = F.interpolate(images, size=(h, w), mode='bilinear', align_corners=False)
     else:
         inputs = images
-    _, preds = model(inputs, compute_masks=compute_masks)  # MaskRCNN and Yolo always return loss, preds
+
+    # print(next(model.parameters()).dtype, inputs.dtype)
+    _, preds = model(inputs, compute_masks=False)  # MaskRCNN and Yolo always return loss, preds
 
     res = []
     for pred, info in zip(preds, patch_infos):
@@ -345,11 +347,7 @@ def batch_inference(model, images, patch_infos, input_size, compute_masks=True,
             o['boxes'][:, [1, 3]] *= h_ori/h
             # info = [x0_s, y0_s, w_p(w_s), h_p(h_s), pad_w(x0_p), pad_h(y0_p)]
             x0_s, y0_s, w_p, h_p, x0_p, y0_p = info
-#             roi_slide, roi_patch = info
-#             x0_s, y0_s, w_s, h_s = roi_slide  # torch.int32
-#             x0_p, y0_p, w_p, h_p = roi_patch  # torch.int32
-#             assert x0_p == 64 and y0_p == 64 and w_s == w_p and h_s == h_p, f"{roi_slide}, {roi_patch}"
-            
+
             x_c, y_c = o['boxes'][:,[0,2]].mean(1), o['boxes'][:,[1,3]].mean(1)
             keep = (x_c > x0_p) & (x_c < x0_p + w_p) & (y_c > y0_p) & (y_c < y0_p + h_p)
             o = {k: v[keep] for k, v in o.items()}
@@ -364,7 +362,7 @@ def batch_inference(model, images, patch_infos, input_size, compute_masks=True,
     return res
 
 
-def yolo_inference_iterator(model, data_loader, input_size=640, compute_masks=True, device=torch.device('cuda'), **kwargs):
+def yolo_inference_iterator(model, data_loader, input_size=640, compute_masks=True, device=torch.device('cpu'), **kwargs):
     """ Inference on a whole slide data loader with given model.
         Provide score_threshold and iou_threshold if they are different from default.
     """
@@ -384,6 +382,8 @@ def yolo_inference_iterator(model, data_loader, input_size=640, compute_masks=Tr
     results = defaultdict(list)
     with torch.no_grad():
         for images, patch_infos in data_loader:
+            patch_infos = patch_infos.to(device, model_dtype)
+            # print(images)
             images = images.to(device, model_dtype, non_blocking=True)
             r = batch_inference(model, images, patch_infos, 
                                 input_size=(h, w), compute_masks=compute_masks, 

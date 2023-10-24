@@ -1,24 +1,22 @@
-FROM continuumio/miniconda3
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
 
-## Make RUN commands use the new environment:
-COPY environment.yaml /
-RUN apt-get update && apt-get install -yy build-essential && apt-get clean && conda env create -f /environment.yaml
+ENV ROOT_DIR=/opt/hd_wsi
 
-## Downloads scripts
-COPY . /usr/src/hd_wsi/
-# RUN git clone https://github.com/impromptuRong/hd_wsi /usr/src/hd_wsi
+RUN printf "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ jammy main restricted universe multiverse\n\
+    deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ jammy-updates main restricted universe multiverse\n\
+    deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ jammy-backports main restricted universe multiverse\n\
+    deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse" > /etc/apt/sources.list
 
-## Download models
-RUN pip install gdown
-RUN mkdir -p /usr/src/hd_wsi/selected_models/benchmark_lung/
-RUN gdown 131RQwmrQeonwuLr46L06gWZ8Jv60opSt -O /usr/src/hd_wsi/selected_models/benchmark_lung/
-RUN mkdir -p /usr/src/hd_wsi/selected_models/benchmark_nucls_paper/
-RUN gdown 131zR4g-V1wmjXBhmzuEGnqt-ttzNuSPK -O /usr/src/hd_wsi/selected_models/benchmark_nucls_paper/
+RUN apt-get update && \
+    apt-get install -y build-essential libgdal-dev ffmpeg libsm6 libxext6 && \
+    apt-get install -y openslide-tools libgl1-mesa-dev libglib2.0-0 gobject-introspection && \
+    apt-get clean
 
-WORKDIR /usr/src/hd_wsi
-# uvicorn app:app --host 0.0.0.0 --port 5001 --workers 32 --log-level debug --reload
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "hd_env", \
-            "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000", \
-            "--workers", "16", "--log-level", "debug", "--reload"]
+RUN mkdir $ROOT_DIR
+COPY ./ $ROOT_DIR
 
-# ENTRYPOINT . "/opt/conda/etc/profile.d/conda.sh" && export PATH="/opt/conda/bin:$PATH" && conda activate ml_env0 && python /usr/src/hd_wsi/deepzoom_multiserver.py --data_path /slides_folder -l 0.0.0.0
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && pip install -U pip && \
+    cd $ROOT_DIR && pip install -r requirements.txt && rm requirements.txt
+
+ENTRYPOINT ["python", "/opt/hd_wsi/main.py"]
+

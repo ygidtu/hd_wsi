@@ -1,0 +1,45 @@
+[tool.poetry]
+name = "hd-wsi"
+version = "0.1.0"
+description = ""
+authors = ["ygidtu <ygidtu@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+pandas = "^2.1.1"
+pillow = "^10.1.0"
+seaborn = "^0.13.0"
+scikit-image = "^0.22.0"
+scikit-learn = "^1.3.1"
+scipy = "^1.11.3"
+opencv-python = "^4.8.1.78"
+openslide-python = "^1.3.1"
+psutil = "^5.9.6"
+pycocotools = "^2.0.7"
+google-pasta = "^0.2.0"
+google-auth = "^2.23.3"
+google-auth-oauthlib = "^1.1.0"
+grpcio = "^1.59.0"
+opencv-python-headless = "^4.8.1.78"
+nimfa = "^1.4.0"
+tifffile = "^2023.9.26"
+imagecodecs = "^2023.9.18"
+click = "^8.1.7"
+
+[tool.poetry.group.torch.dependencies]
+torch = "^2.1.0"
+torchvision = "^0.16.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[[tool.poetry.source]]
+name = "mirrors"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+priority = "primary"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "supplemental"

@@ -3,35 +3,34 @@
 ## function can be used to create torchvision.Compose
 ## Currently all functions are designed for channel_last image
 
+import math
+import numbers
 import os
 import re
 import sys
+from collections import defaultdict, Counter
+from io import BytesIO
+from itertools import cycle, groupby, product
+
 import cv2
-import math
-import time
-import numbers
-import traceback
+import matplotlib.colors
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import skimage
 import skimage.io
-import skimage.transform
 import skimage.morphology
 import skimage.restoration
 import skimage.segmentation
-import matplotlib.pyplot as plt
-import matplotlib.colors
-
+import skimage.transform
 from PIL import Image
-from io import BytesIO
-from itertools import cycle
-from tifffile import TiffFile
-from collections import defaultdict
 from matplotlib.collections import PatchCollection
-from matplotlib.patches import Circle, Wedge, Polygon, Rectangle
-from skimage.color import rgb2hsv, hsv2rgb, hed2rgb, rgb2hed, gray2rgb
-# from pycocotools import mask as mask_utils
-
+from matplotlib.patches import Polygon, Rectangle
+from nimfa import Snmf
+from pycocotools import mask as mask_utils
+from skimage.color import rgb2hsv, hsv2rgb
+from skimage.measure._regionprops import RegionProperties
+from tifffile import TiffFile
 
 # IMAGE_NET_MEAN_TF = np.array([123.68, 116.779, 103.939])
 # IMAGE_NET_STD_TF = 1.0
@@ -1182,8 +1181,6 @@ def rgba2rgb(img, background=(0, 0, 0), binary_alpha=False):
 
 
 def snmf(im_sda, w_init, beta=0.2):
-    from nimfa import Snmf
-    
     m = im_sda if im_sda.ndim == 2 else im_sda.reshape((-1, im_sda.shape[-1])).T
     m = m[:, np.isfinite(m).all(axis=0)]
     # m = convert_image_to_matrix(im_sda)
@@ -1195,7 +1192,7 @@ def snmf(im_sda, w_init, beta=0.2):
     return w / np.sqrt((w ** 2).sum(0))
 
 
-def estimate_stain_matrix(x, w_init, beta=0.2, I_0=255, plot=False):
+def estimate_stain_matrix(x, w_init, I_0=255, plot=False, **kwargs):
     # import histomicstk as htk
     
     im_sda = rgb_to_sda(x, I_0=I_0)
@@ -1223,7 +1220,6 @@ def estimate_stain_matrix(x, w_init, beta=0.2, I_0=255, plot=False):
 
 def estimate_stain_matrix_htk(x, w_init, beta=0.2, I_0=255, plot=False):
     import histomicstk as htk
-    
     im_sda = htk.preprocessing.color_conversion.rgb_to_sda(x, I_0=I_0)
     w_est = htk.preprocessing.color_deconvolution.separate_stains_xu_snmf(im_sda, w_init[:2].T, beta=beta)
     # w_est = complement_stain_matrix(np.vstack([w_est.T, [0,0,0]]))
@@ -1533,8 +1529,6 @@ def binary_mask_to_rle(x, compress=True):
 
 ## paired function for contiguous. The rle is actually transposed.
 def rle_encode(x):
-    from pycocotools import mask as mask_utils
-    
     assert x.data.contiguous, f"input tensor need to be contiguous."
     return mask_utils.encode(x.astype(np.uint8).T)
 
@@ -1615,7 +1609,7 @@ class Mask(object):
             return self.poly()
         elif mode.startswith('mask'):
             return self.mask(dtype)
-        elif model.startswith('rle'):
+        elif mode.startswith('rle'):
             return self.rle()
         else:
             raise ValueError(f"{mode} is not supported.")
@@ -1669,7 +1663,7 @@ class Mask(object):
     def hflip(self):
         if self.mode.startswith('poly'):
             m = [np.abs(_ - [self.size[1], 0]) for _ in self.m]
-        elif self.model.startswith('rle'):
+        elif self.mode.startswith('rle'):
             m = rle_decode(self.m, self.size)
             m = rle_encode(m[:, ::-1, ...])
         elif self.mode.startswith('mask'):
@@ -1680,7 +1674,7 @@ class Mask(object):
     def vflip(self):
         if self.mode.startswith('poly'):
             m = [np.abs(_ - [0, self.size[0]]) for _ in self.m]
-        elif self.model.startswith('rle'):
+        elif self.mode.startswith('rle'):
             m = rle_decode(self.m, self.size)
             m = rle_encode(m[::-1, ...])
         elif self.mode.startswith('mask'):
@@ -1691,7 +1685,7 @@ class Mask(object):
     def t(self):
         if self.mode.startswith('poly'):
             m = [_[:, [1,0]] for _ in self.m]
-        elif self.model.startswith('rle'):
+        elif self.mode.startswith('rle'):
             m = rle_decode(self.m, self.size)
             m = rle_encode(m.T)
         elif self.mode.startswith('mask'):
@@ -1705,7 +1699,7 @@ class Mask(object):
         elif self.mode.startswith('rle'):
             return len(self.m) > 0
         elif self.mode.startswith('mask'):
-            return m.sum() > 0
+            return self.m.sum() > 0
 
 
 class Box(object):
@@ -1716,7 +1710,7 @@ class Box(object):
         self.mode = mode
 
 
-class ObjectProperties(skimage.measure._regionprops.RegionProperties):
+class ObjectProperties(RegionProperties):
     """ Simplify skimage.measure.RegionProperties. 
         Avoid the unnecessary memory cost and computational time to resize and 
         paste model predictions to original image size.
@@ -1782,7 +1776,6 @@ def decode_annotations(annotations, height=None, width=None, dtype='uint8'):
         code will prioritize 'height', 'width' coded in annotations.
         If the above slots are not provided, the default height, width will be used.
     """
-    mask_utils
     masks, labels, bboxes = [], [], []
     for obj in annotations:
         h = obj['height'] if 'height' in obj else height
@@ -3152,7 +3145,7 @@ def product_transform_pars(args):
                    vertical_flip='vertical_flip')
     par_list = [args[k] for k in key_map]
     pars = [dict(zip([key_map[k] for k in key_map], x))
-            for x in itertools.product(*par_list)]
+            for x in product(*par_list)]
         
     for x in pars:
         x['theta'] = np.deg2rad(x['theta'])
