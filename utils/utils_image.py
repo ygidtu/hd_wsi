@@ -4,6 +4,8 @@
 ## Currently all functions are designed for channel_last image
 
 import math
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import numbers
 import os
 import re

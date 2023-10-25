@@ -7,10 +7,19 @@ docker build -t hd_wsi . && rm requirements.txt
 docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) -w $PWD --gpus all hd_wsi bash
 
 docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus all hd_wsi wsi \
-  --data_path /NAS/yzy/project/tcga_luad_svs/0b3cff7b-bbe2-40ab-aee6-cb0554940eaa/TCGA-05-4244-01Z-00-DX1.d4ff32cd-38cf-40ea-8213-45c2b100ac01.svs \
+  --data_path /NAS/yzy/project/tcga_luad_svs/21865061-aadd-4bbf-94c7-c6fe3adf08a3/TCGA-55-8614-01Z-00-DX1.043DE2B5-A453-4570-8830-99170450658C.svs \
   --model $PWD/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
-   --output_dir $PWD/test_wsi \
+  --output_dir $PWD/test_wsi5 \
   --save_csv --batch_size 4 --num_workers 38 --max_memory 10000
+  
+docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus all hd_wsi summarize \
+  --model_res_path $PWD/test_wsi5 --output_dir $PWD/test_wsi5/summarized \
+  --n_patches 100 --patch_size 512 --score_thresh 10 --scale_factor 16
+  
+python run_wsi_inference.py \
+  --data_path /NAS/yzy/project/tcga_luad_svs/21865061-aadd-4bbf-94c7-c6fe3adf08a3/TCGA-55-8614-01Z-00-DX1.043DE2B5-A453-4570-8830-99170450658C.svs \
+  --model $PWD/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
+  --output_dir $PWD/test_wsi5 --save_csv --batch_size 4 --num_workers 38 --max_memory 10000
 ```
 
 

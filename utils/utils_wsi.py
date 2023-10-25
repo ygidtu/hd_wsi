@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os
 import math
 import pickle
@@ -26,6 +28,33 @@ from .utils_image import get_dzi, img_as, pad, Mask, overlay_detections
 
 
 TO_REMOVE = 1
+
+
+def save_predicted_models(path: str, outputs: dict):
+    os.makedirs(path, exist_ok=True)
+
+    for k, v in outputs.items():
+        if k == "model":
+            torch.jit.save(v, os.path.join(path, k))
+        else:
+            torch.save(v, os.path.join(path, k))
+
+
+def load_predicted_models(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"{path} not found.")
+
+    if os.path.isfile(path):
+        return torch.load(path)
+
+    res = {}
+    for i in os.listdir(path):
+        if i == "model":
+            res[i] = torch.jit.load(os.path.join(path, i), map_location="cpu")
+        else:
+            res[i] = torch.load(os.path.join(path, i))
+
+    return res
 
 
 def load_cfg(cfg):
@@ -288,8 +317,6 @@ class WholeSlideDataset(torch.utils.data.Dataset):
             patch = patch.permute(1, 2, 0).numpy()
             h, w = patch.shape[0], patch.shape[1]
 
-            print('===================')
-            print(patch_id, patch_info)
             fig, axes = plt.subplots(1, 2, figsize=(12, 6))
             axes[0].imshow(patch)
             if results is not None:
@@ -323,7 +350,6 @@ def batch_inference(model, images, patch_infos, input_size, compute_masks=True,
     else:
         inputs = images
 
-    # print(next(model.parameters()).dtype, inputs.dtype)
     _, preds = model(inputs, compute_masks=False)  # MaskRCNN and Yolo always return loss, preds
 
     res = []
@@ -379,11 +405,10 @@ def yolo_inference_iterator(model, data_loader, input_size=640, compute_masks=Tr
     model.to(device)
     model_dtype = next(model.parameters()).dtype
 
-    results = defaultdict(list)
     with torch.no_grad():
         for images, patch_infos in data_loader:
             patch_infos = patch_infos.to(device, model_dtype)
-            # print(images)
+
             images = images.to(device, model_dtype, non_blocking=True)
             r = batch_inference(model, images, patch_infos, 
                                 input_size=(h, w), compute_masks=compute_masks, 

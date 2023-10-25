@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import math
 import os
 import time
@@ -8,6 +11,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from torchvision.transforms import ToTensor
+from loguru import logger
 
 import configs as CONFIGS
 from utils.utils_image import get_pad_width, rgba2rgb
@@ -17,7 +21,6 @@ from utils.utils_wsi import load_cfg, load_hdyolo_model, is_image_file
 
 
 def analyze_one_patch(img, model, dataset_configs, mpp=None, compute_masks=True, ):
-    h_ori, w_ori = img.shape[1:]
     model_par0 = next(model.parameters())
     img = img.to(model_par0.device, model_par0.dtype, non_blocking=True)
 
@@ -75,14 +78,14 @@ def overlay_masks_on_image(image, mask):
 @click.option('--box_only', is_flag=True, help="Only save box and ignore mask.")
 @click.option('--export_text', is_flag=True,
               help="If save_csv is enabled, whether to convert numeric labels into text.")
-def patch(model, device, output_dir, meta_info, data_path, mpp, box_only, export_text):
+def patch(data_path, meta_info, model, output_dir, device, mpp, box_only, export_text):
     u""" Patch inference with HD-Yolo. """
     if model in CONFIGS.MODEL_PATHS:
         model = CONFIGS.MODEL_PATHS[model]
-    print("==============================")
+
     model = load_hdyolo_model(model, nms_params=CONFIGS.NMS_PARAMS)
     if device == 'cuda' and not torch.cuda.is_available():
-        print(f"Cuda is not available, use cpu instead.")
+        logger.warning(f"Cuda is not available, use cpu instead.")
         device = 'cpu'
     device = torch.device(device)
 
@@ -90,11 +93,11 @@ def patch(model, device, output_dir, meta_info, data_path, mpp, box_only, export
         model.float()
     model.eval()
     model.to(device)
-    print(f"Load model: {model} to {device} (nms: {model.headers.det.nms_params}")
+    logger.info(f"Load model: {model} to {device} (nms: {model.headers.det.nms_params}")
 
     meta_info = load_cfg(meta_info)
     dataset_configs = {'mpp': CONFIGS.DEFAULT_MPP, **CONFIGS.DATASETS, **meta_info}
-    print(f"Dataset configs: {dataset_configs}")
+    logger.info(f"Dataset configs: {dataset_configs}")
 
     if os.path.isdir(data_path):
         keep_fn = lambda x: is_image_file(x)
@@ -102,16 +105,14 @@ def patch(model, device, output_dir, meta_info, data_path, mpp, box_only, export
     else:
         rel_path = os.path.basename(data_path)
         patch_files = [(0, rel_path, data_path)]
-    print(f"Inputs: {data_path} ({len(patch_files)} files observed). ")
+    logger.info(f"Inputs: {data_path} ({len(patch_files)} files observed). ")
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    print(f"Outputs: {output_dir}")
-    print("==============================")
+    logger.info(f"Outputs: {output_dir}")
 
     for file_idx, rel_path, patch_path in patch_files:
-        print("==============================")
-        print(patch_path)
+        logger.info(patch_path)
         output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -125,7 +126,7 @@ def patch(model, device, output_dir, meta_info, data_path, mpp, box_only, export
             img, model, dataset_configs, mpp=mpp,
             compute_masks=not box_only,
         )
-        print(f"Inference time: {outputs['inference_time']} s")
+        logger.info(f"Inference time: {outputs['inference_time']} s")
         res_file = os.path.join(output_dir, f"{image_id}_pred.pt")
         torch.save(outputs, res_file)
 
@@ -150,8 +151,6 @@ def patch(model, device, output_dir, meta_info, data_path, mpp, box_only, export
         export_img = overlay_masks_on_image(raw_img, mask_img)
         img_file = os.path.join(output_dir, f"{image_id}_pred{ext}")
         export_img.save(img_file)
-        # Image.fromarray(mask_img).save(img_file)
-        # write_png((img_mask*255).type(torch.uint8), img_file)
 
         # save to csv
         if export_text and 'labels_text' in dataset_configs:
@@ -171,7 +170,6 @@ def patch(model, device, output_dir, meta_info, data_path, mpp, box_only, export
         )
         csv_file = os.path.join(output_dir, f"{image_id}_pred.csv")
         df.to_csv(csv_file, index=False)
-        print("==============================")
 
 
 if __name__ == '__main__':

@@ -1,20 +1,21 @@
-import click
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os
 import sys
 import time
 from collections import defaultdict
 
-import cv2
+import click
 import psutil
 import torch
+from loguru import logger
 from openslide import open_slide
 
 import configs as CONFIGS
 from utils.utils_image import Slide
-from utils.utils_wsi import ObjectIterator, WholeSlideDataset, folder_iterator
-from utils.utils_wsi import export_detections_to_image, export_detections_to_table, wsi_imwrite
-from utils.utils_wsi import get_slide_and_ann_file, generate_roi_masks
-from utils.utils_wsi import load_cfg, load_hdyolo_model, yolo_inference_iterator
+from utils.utils_wsi import ObjectIterator, WholeSlideDataset, folder_iterator, export_detections_to_image, \
+    export_detections_to_table, wsi_imwrite, get_slide_and_ann_file, generate_roi_masks, load_cfg, load_hdyolo_model, \
+    yolo_inference_iterator, save_predicted_models, load_predicted_models
 
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 
@@ -36,7 +37,7 @@ def analyze_one_slide(model, dataset, batch_size=64, n_workers=64,
 
     model.eval()
     t0 = time.time()
-    print(f"Inferencing: ", end="")
+
     generator = yolo_inference_iterator(
         model, data_loader,
         input_size=input_size,
@@ -48,7 +49,7 @@ def analyze_one_slide(model, dataset, batch_size=64, n_workers=64,
     results = defaultdict(list)
     masks, mask_mem, file_index = [], 0, 0
     for o in generator:
-        # print(o)
+        # logger.info(o)
         for k, v in o.items():
             if k != 'masks':
                 results[k].append(v.cpu())
@@ -57,7 +58,7 @@ def analyze_one_slide(model, dataset, batch_size=64, n_workers=64,
                 masks.append(mask_tensor)
                 mask_mem += _byte2mb(sys.getsizeof(mask_tensor.storage()))
                 avail_mem = min(max_mem, _byte2mb(psutil.virtual_memory().free * 0.8))
-                # print(f"Track memory usage: {mask_mem}, {mask_mem/max_mem}")
+                # logger.info(f"Track memory usage: {mask_mem}, {mask_mem/max_mem}")
                 if export_masks and mask_mem >= avail_mem:
                     file_index += 1
                     filename = f"{export_masks}_{file_index:0{len(str(N_patches))}}"
@@ -80,7 +81,7 @@ def analyze_one_slide(model, dataset, batch_size=64, n_workers=64,
     if masks:
         res['masks'] = torch.cat(masks)
     t1 = time.time()
-    print(f"{t1 - t0} s")
+    logger.info(f"{t1 - t0} s")
 
     return {'cell_stats': res, 'inference_time': t1 - t0}
 
@@ -107,14 +108,14 @@ def analyze_one_slide(model, dataset, batch_size=64, n_workers=64,
 @click.option('--export_mask', is_flag=True,
               help="If save_csv is enabled, whether to export mask polygons into csv.")
 def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
-         max_memory, save_img, save_csv, export_text, export_mask, batch_size, roi):
+        max_memory, save_img, save_csv, export_text, export_mask, batch_size, roi):
     u""" WSI inference with HD-Yolo. """
     if model in CONFIGS.MODEL_PATHS:
         model = CONFIGS.MODEL_PATHS[model]
-    print("==============================")
+
     model = load_hdyolo_model(model, nms_params=CONFIGS.NMS_PARAMS)
     if device == 'cuda' and not torch.cuda.is_available():
-        print(f"Cuda is not available, use cpu instead.")
+        logger.warning(f"Cuda is not available, use cpu instead.")
         device = 'cpu'
     device = torch.device(device)
 
@@ -122,11 +123,11 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
         model = model.float()
     model.eval()
     model = model.to(device)
-    print(f"Load model: {model} to {device} (nms: {model.headers.det.nms_params}")
+    logger.info(f"Load model to {device} (nms: {model.headers.det.nms_params}")
 
     meta_info = load_cfg(meta_info)
     dataset_configs = {'mpp': CONFIGS.DEFAULT_MPP, **CONFIGS.DATASETS, **meta_info}
-    print(f"Dataset configs: {dataset_configs}")
+    logger.info(f"Dataset configs: {dataset_configs}")
 
     if os.path.isdir(data_path):
         keep_fn = lambda x: os.path.splitext(x)[1] in ['.svs', '.tiff']
@@ -134,9 +135,8 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
     else:
         rel_path = os.path.basename(data_path)
         slide_files = [(0, rel_path, data_path)]
-    print(f"Inputs: {data_path} ({len(slide_files)} files observed). ")
-    print(f"Outputs: {output_dir}")
-    print("==============================")
+    logger.info(f"Inputs: {data_path} ({len(slide_files)} files observed). ")
+    logger.info(f"Outputs: {output_dir}")
 
     for file_idx, rel_path, slide_file in slide_files:
         output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
@@ -146,7 +146,6 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
         res_file = os.path.join(output_dir, f"{slide_id}.pt")
         res_file_masks = os.path.join(output_dir, f"{slide_id}.masks.pt")
 
-        print("==============================")
         if not os.path.exists(res_file):
             t0 = time.time()
             try:
@@ -154,12 +153,12 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
                 roi_masks = generate_roi_masks(osr, roi)
                 dataset = WholeSlideDataset(osr, masks=roi_masks, processor=None, **dataset_configs)
                 osr.attach_reader(open_slide(osr.img_file))
-                print(dataset.info())
+                logger.info(dataset.info())
             except Exception as e:
-                print(f"Failed to create slide dataset for: {slide_file}.")
-                print(e)
+                logger.error(f"Failed to create slide dataset for: {slide_file}.")
+                logger.error(e)
                 continue
-            print(f"Loading slide: {time.time() - t0} s")
+            logger.info(f"Loading slide: {time.time() - t0} s")
             outputs = analyze_one_slide(model, dataset,
                                         compute_masks=not box_only,
                                         batch_size=batch_size,
@@ -180,18 +179,18 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
                 output_masks = outputs['cell_stats']['masks']
                 del outputs['cell_stats']['masks']
                 torch.save(output_masks, res_file_masks)
-                torch.save(outputs, res_file)
+                save_predicted_models(res_file, outputs)
                 outputs['cell_stats']['masks'] = output_masks
             else:
-                torch.save(outputs, res_file)
+                save_predicted_models(res_file, outputs)
             osr.detach_reader(close=True)
-            print(f"Total time: {time.time() - t0} s")
+            logger.info(f"Total time: {time.time() - t0} s")
         else:
             outputs = {}
 
         if save_img or save_csv:
             if not outputs:
-                outputs = torch.load(res_file)
+                outputs = load_predicted_models(res_file)
             if box_only:
                 param_masks = None
             else:
@@ -205,7 +204,7 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
         if save_img:
             img_file = os.path.join(output_dir, f"{slide_id}.tiff")
             if not os.path.exists(img_file):
-                print(f"Exporting result to image: ", end="")
+                logger.info(f"Exporting result to image: ", end="")
                 t0 = time.time()
 
                 object_iterator = ObjectIterator(
@@ -224,12 +223,12 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
                 wsi_imwrite(mask, img_file, outputs['slide_info'], CONFIGS.TIFF_PARAMS,
                             model=outputs['model'],
                             )
-                print(f"{time.time() - t0} s")
+                logger.info(f"{time.time() - t0} s")
 
         if save_csv:
             csv_file = os.path.join(output_dir, f"{slide_id}.csv")
             if not os.path.exists(csv_file):
-                print(f"Exporting result to csv: ", end="")
+                logger.info(f"Exporting result to csv: ", end="")
                 t0 = time.time()
 
                 if export_text and 'labels_text' in outputs['meta_info']:
@@ -248,8 +247,7 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
                     save_masks=(not box_only) and export_mask,
                 )
                 df.to_csv(csv_file, index=False)
-                print(f"{time.time() - t0} s")
-        print("==============================")
+                logger.info(f"{time.time() - t0} s")
 
 
 if __name__ == '__main__':

@@ -165,3 +165,6 @@ cython_debug/
 trained_models/
 Dockerfile
 test_*/
+.git/
+selected_models/
+*.pt
