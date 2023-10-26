@@ -114,6 +114,7 @@ def generate_nuclei_map(x, slide_size=None, n_classes=None, use_scores=False):
     i_y = ((x['boxes'][:, 0] + x['boxes'][:, 2]) / 2).round()
     val = x['scores']
     # build point clouds
+    i_c, i_x, i_y = i_c.type(torch.int64), i_x.type(torch.int64), i_y.type(torch.int64)
     pts = torch.sparse_coo_tensor([i_c.tolist(), i_x.tolist(), i_y.tolist()],
                                   (val if use_scores else [1.0] * len(val)),
                                   (n_classes, h, w)).coalesce()

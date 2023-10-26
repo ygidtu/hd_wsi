@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
-import time
 import pickle
+import time
 from glob import glob
 
 import click
+from tqdm import tqdm
 
 from utils.utils_features import *
 from utils.utils_image import Slide
@@ -14,6 +15,38 @@ from utils.utils_wsi import folder_iterator, load_predicted_models, ObjectIterat
 SEED = 42
 SCALE_FACTOR = 32
 DEFAULT_MPP = 0.25
+
+
+# def filter_out_inf(boxes):
+#     u"""
+#     如果boxes中含有inf，会造成后期int overflow，因此手动将inf改为最大的int值
+#     :param boxes:
+#     :return:
+#     """
+#     max_val = [0, 0, 0, 0]
+#     logger.info("stats max_values")
+#     have_inf = False
+#     for x in tqdm(boxes):
+#         for i, j in enumerate(x.tolist()):
+#             if j != torch.inf and j != torch.nan:
+#                 max_val[i] = max(max_val[i], j)
+#                 have_inf = True
+#
+#     if have_inf:
+#         res = []
+#         logger.info("replacing inf")
+#         for x in tqdm(boxes):
+#             row = []
+#             for i, j in enumerate(x):
+#                 if j == torch.inf or j == torch.nan:
+#                     row.append(max_val[i])
+#                 else:
+#                     row.append(j)
+#             res.append(row)
+#         return torch.tensor(res)
+#     else:
+#         logger.info("there is not inf, nothing to do")
+#     return boxes
 
 
 @click.command()
@@ -103,6 +136,14 @@ def summarize(
 
                 mpp_scale = slide_info['mpp'] / default_mpp
                 slide_size = int(math.ceil(slide_size[0] * mpp_scale)), int(math.ceil(slide_size[1] * mpp_scale))
+
+                logger.info("filter out inf or nan from boxes")
+                # res_nuclei["boxes"] = filter_out_inf(res_nuclei["boxes"])
+                # remove boxes with inf
+                kept_idx = [not any(x == torch.inf) for x in tqdm(res_nuclei["boxes"])]
+                for k, v in res_nuclei.items():
+                    res_nuclei[k] = v[kept_idx]
+
                 res_nuclei['boxes'] *= mpp_scale
 
                 # Extract nuclei features

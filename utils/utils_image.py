@@ -13,6 +13,7 @@ import sys
 from collections import defaultdict, Counter
 from io import BytesIO
 from itertools import cycle, groupby, product
+from loguru import logger
 
 import cv2
 import matplotlib.colors
@@ -2460,63 +2461,54 @@ class Slide(object):
         self.page_indices = []
         self.level_dims = []
         self.level_downsamples = []
-        
-        try:
-            if verbose:
-                print(f"Loading slide: {self.img_file}")
-            with open(self.img_file, 'rb') as fp:
-                slide = TiffFile(fp)
-                self.description = slide.pages[0].description
 
-                # magnification
-                val = re.findall(r'\|((?i:AppMag)|(?i:magnitude)) = (?P<mag>[\d.]+)', self.description)
-                self.magnitude = float(val[0][1]) if val else None
-                if verbose and self.magnitude is None:
-                    print(f"Didn't find magnitude in description.")
+        logger.info(f"Loading slide: {self.img_file}")
+        with open(self.img_file, 'rb') as fp:
+            slide = TiffFile(fp)
+            self.description = slide.pages[0].description
 
-                # mpp
-                val = re.findall(r'\|((?i:MPP)) = (?P<mpp>[\d.]+)', self.description)
-                self.mpp = float(val[0][1]) if val else None
-                if verbose and self.mpp is None:
-                    print(f"Didn't find mpp in description.")
+            # magnification
+            val = re.findall(r'\|((?i:AppMag)|(?i:magnitude)) = (?P<mag>[\d.]+)', self.description)
+            self.magnitude = float(val[0][1]) if val else None
+            if self.magnitude is None:
+                raise AttributeError("Didn't find magnitude in description.")
 
-                ## level_dims consistent with open_slide: (w, h), (OriginalHeight, OriginalWidth)
-                level_dims, scales, page_indices = [(slide.pages[0].shape[1], slide.pages[0].shape[0])], [1.0], [0]
-                for page_idx, page in enumerate(slide.pages[1:], 1):
-                    if 'label' in page.description or 'macro' in page.description:
-                        continue
-                    if page.tilewidth == 0 or page.tilelength == 0:
-                        continue
-                    h, w = page.shape[0], page.shape[1]
-                    if round(level_dims[0][0]/w) == round(level_dims[0][1]/h):
-                        level_dims.append((w, h))
-                        scales.append(level_dims[0][0]/w)
-                        page_indices.append(page_idx)
-                
-                order = sorted(range(len(scales)), key=lambda x: scales[x])
-                self.page_indices = [page_indices[idx] for idx in order]
-                self.level_dims = [level_dims[idx] for idx in order]
-                self.level_downsamples = [scales[idx] for idx in order]
-                self.n_levels = len(self.level_downsamples)
-        except Exception as e:
-            if verbose:
-                print(f"Failed to load slide: {img_file}.")
-                print(e)
-                # traceback.print_exc()
-        
+            # mpp
+            val = re.findall(r'\|((?i:MPP)) = (?P<mpp>[\d.]+)', self.description)
+            self.mpp = float(val[0][1]) if val else None
+            if verbose and self.mpp is None:
+                raise AttributeError("Didn't find mpp in description.")
+
+            ## level_dims consistent with open_slide: (w, h), (OriginalHeight, OriginalWidth)
+            level_dims, scales, page_indices = [(slide.pages[0].shape[1], slide.pages[0].shape[0])], [1.0], [0]
+            for page_idx, page in enumerate(slide.pages[1:], 1):
+                if 'label' in page.description or 'macro' in page.description:
+                    continue
+                if page.tilewidth == 0 or page.tilelength == 0:
+                    continue
+                h, w = page.shape[0], page.shape[1]
+                if round(level_dims[0][0]/w) == round(level_dims[0][1]/h):
+                    level_dims.append((w, h))
+                    scales.append(level_dims[0][0]/w)
+                    page_indices.append(page_idx)
+
+            order = sorted(range(len(scales)), key=lambda x: scales[x])
+            self.page_indices = [page_indices[idx] for idx in order]
+            self.level_dims = [level_dims[idx] for idx in order]
+            self.level_downsamples = [scales[idx] for idx in order]
+            self.n_levels = len(self.level_downsamples)
+
         ## load annotations
         self.xml_tree = None
         self.annotations = None
         if ann_file is not None:
             import xml.etree.ElementTree as ET
             try:
-                if verbose:
-                    print(f"Loading annotation: {ann_file}")
+                logger.info(f"Loading annotation: {ann_file}")
                 self.xml_tree = ET.parse(ann_file)  # Convert XML file into tree representation
                 self.annotations = decode_xml_tree(self.xml_tree)
             except:
-                if verbose:
-                    print(f"Failed to load annotation: {ann_file}")
+                logger.error(f"Failed to load annotation: {ann_file}")
         
         ## Set engine and file handle to None
         self.fh = None
