@@ -130,7 +130,7 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
     logger.info(f"Dataset configs: {dataset_configs}")
 
     if os.path.isdir(data_path):
-        keep_fn = lambda x: os.path.splitext(x)[1] in ['.svs', '.tiff']
+        keep_fn = lambda x: os.path.splitext(x)[1] in ['.svs', '.tif', '.tiff']
         slide_files = list(folder_iterator(data_path, keep_fn))
     else:
         rel_path = os.path.basename(data_path)

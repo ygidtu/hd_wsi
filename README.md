@@ -2,7 +2,7 @@
 
 ```bash
 poetry export -f requirements.txt --output requirements.txt --without-hashes --without-urls --without=torch
-docker build -t hd_wsi . && rm requirements.txt
+docker build -t hd_wsi . && rm requirements.txtslide_file
 
 docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) -w $PWD --gpus all hd_wsi bash
 
@@ -20,6 +20,11 @@ python run_wsi_inference.py \
   --data_path /NAS/yzy/project/tcga_luad_svs/21865061-aadd-4bbf-94c7-c6fe3adf08a3/TCGA-55-8614-01Z-00-DX1.043DE2B5-A453-4570-8830-99170450658C.svs \
   --model $PWD/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
   --output_dir $PWD/test_wsi5 --save_csv --batch_size 4 --num_workers 38 --max_memory 10000
+  
+  
+python summarize_tme_features.py \
+  --model_res_path /NAS/yzy/software/hd_wsi-master/WSI/TCGA-ZS-A9CG-01Z-00-DX1.FEF9A55C-9331-469C-9D13-FCB232136024.pt \
+  --output_dir $PWD/test_wsi5/test
 ```
 
 

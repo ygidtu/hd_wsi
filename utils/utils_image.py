@@ -2471,13 +2471,13 @@ class Slide(object):
             val = re.findall(r'\|((?i:AppMag)|(?i:magnitude)) = (?P<mag>[\d.]+)', self.description)
             self.magnitude = float(val[0][1]) if val else None
             if self.magnitude is None:
-                raise AttributeError("Didn't find magnitude in description.")
+                logger.warning("Didn't find magnitude in description.")
 
             # mpp
             val = re.findall(r'\|((?i:MPP)) = (?P<mpp>[\d.]+)', self.description)
             self.mpp = float(val[0][1]) if val else None
             if verbose and self.mpp is None:
-                raise AttributeError("Didn't find mpp in description.")
+                logger.warning("Didn't find mpp in description.")
 
             ## level_dims consistent with open_slide: (w, h), (OriginalHeight, OriginalWidth)
             level_dims, scales, page_indices = [(slide.pages[0].shape[1], slide.pages[0].shape[0])], [1.0], [0]
