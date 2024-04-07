@@ -5,78 +5,17 @@ import pickle
 import time
 from glob import glob
 
-import click
 from tqdm import tqdm
 
 from utils.utils_features import *
 from utils.utils_image import Slide
 from utils.utils_wsi import folder_iterator, load_predicted_models, ObjectIterator
 
-SEED = 42
-SCALE_FACTOR = 32
-DEFAULT_MPP = 0.25
 
-
-# def filter_out_inf(boxes):
-#     u"""
-#     如果boxes中含有inf，会造成后期int overflow，因此手动将inf改为最大的int值
-#     :param boxes:
-#     :return:
-#     """
-#     max_val = [0, 0, 0, 0]
-#     logger.info("stats max_values")
-#     have_inf = False
-#     for x in tqdm(boxes):
-#         for i, j in enumerate(x.tolist()):
-#             if j != torch.inf and j != torch.nan:
-#                 max_val[i] = max(max_val[i], j)
-#                 have_inf = True
-#
-#     if have_inf:
-#         res = []
-#         logger.info("replacing inf")
-#         for x in tqdm(boxes):
-#             row = []
-#             for i, j in enumerate(x):
-#                 if j == torch.inf or j == torch.nan:
-#                     row.append(max_val[i])
-#                 else:
-#                     row.append(j)
-#             res.append(row)
-#         return torch.tensor(res)
-#     else:
-#         logger.info("there is not inf, nothing to do")
-#     return boxes
-
-
-@click.command()
-@click.option('--model_res_path', required=True, default="./slide_results", type=str,
-              help="The detection/segmentation result folder.")
-@click.option('--output_dir', default="./feature_results", type=str, help="The output folder.")
-@click.option('--data_path', default='./', type=str, help="The input data filename or directory.")
-@click.option('--slides_mapping_file', default=None, type=str,
-              help="A csv file explains slide_id -> patient_id.")
-@click.option('--scale_factor', default=SCALE_FACTOR, type=float,
-              help='Apply density analysis by shrinking whole slide to 1/scale_factor.')
-@click.option('--default_mpp', default=DEFAULT_MPP, type=float,
-              help='Normalize slides results under different mpp into default_mpp.')
-@click.option('--n_classes', default=None, type=int, help='Number of nuclei types in analysis.')
-@click.option('--n_patches', default=10, type=int, help='Number of maximum patches to analysis.')
-@click.option('--patch_size', default=2048, type=int, help='Patch size for analysis.')
-@click.option('--max_dist', default=100., type=float,
-              help='Maximum distance between nuclei when considering connecting.')
-@click.option('--nms_thresh', default=0.015, type=float, help='Maximum overlapping between patches.')
-@click.option('--score_thresh', default=160, type=float, help='Minimum coverage of tumor region.')
-@click.option('--device', default='cuda', type=str,
-              help='Run density analysis on cpu or gpu.')
-@click.option('--num_workers', default=None, type=int, help='Number of workers for density data loader.')
-@click.option('--box_only', is_flag=True, help='Ignore nuclei mask morphological features.')
-@click.option('--save_nuclei', is_flag=True, help='Store nuclei morphological features into a csv file.')
-@click.option('--save_images', is_flag=True, help='Store img, dots, densities, roi masks.')
 def summarize(
         model_res_path, output_dir, data_path, slides_mapping_file, scale_factor, default_mpp,
         n_classes, n_patches, patch_size, max_dist, nms_thresh, score_thresh,
-        device, num_workers, box_only, save_nuclei, save_images,
+        device, num_workers, box_only, save_nuclei, save_img, seed,
 ):
     u""" WSI feature extraction. """
     assert os.path.exists(model_res_path), f"{model_res_path} does not exists."
@@ -195,7 +134,7 @@ def summarize(
                     nms_thresh=nms_thresh,
                     score_thresh=score_thresh,
                     max_dist=max_dist,
-                    seed=SEED, device=device,
+                    seed=seed, device=device,
                 )
                 density_img = density_plot(cloud_d, scale_factor=1. / scale_factor)
 
@@ -222,7 +161,7 @@ def summarize(
                              for k, v in output['base_features'].items()})
                 logger.info(f"total time: {output['time']} s.")
 
-                if save_images:
+                if save_img:
                     logger.info(f"Save images: ", end="")
                     t0 = time.time()
                     if slide_img is not None:
@@ -263,5 +202,4 @@ def summarize(
 
 
 if __name__ == '__main__':
-    summarize()
     pass

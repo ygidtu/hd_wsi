@@ -1,40 +1,29 @@
 ![QBRC logo](assets/qbrc.jpeg)
 
+
+## Known issues:
+
+1. patch facing with tensor index errors  
+
 ```bash
-poetry export -f requirements.txt --output requirements.txt --without-hashes --without-urls --without=torch
-docker build -t hd_wsi . && rm requirements.txtslide_file
-
-docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) -w $PWD --gpus all hd_wsi bash
-
-docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus all hd_wsi wsi \
-  --data_path /NAS/yzy/project/tcga_luad_svs/21865061-aadd-4bbf-94c7-c6fe3adf08a3/TCGA-55-8614-01Z-00-DX1.043DE2B5-A453-4570-8830-99170450658C.svs \
-  --model $PWD/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
-  --output_dir $PWD/test_wsi5 \
-  --save_csv --batch_size 4 --num_workers 38 --max_memory 10000
-  
-docker run --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus all hd_wsi summarize \
-  --model_res_path $PWD/test_wsi5 --output_dir $PWD/test_wsi5/summarized \
+poetry run python main.py \
+  --data_path imc/data/tcga_luad_svs/5965ab59-8a43-4a84-a07a-fd0b0c3fab7a/TCGA-05-4425-01Z-00-DX1.82B093EE-49BC-4FD9-91AC-4CC89944309D.svs \
+  --model imc/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
+  --output_dir imc/res/test \
+  --save_csv --batch_size 4 --num_workers 38 --max_memory 10000 \
   --n_patches 100 --patch_size 512 --score_thresh 10 --scale_factor 16
+
   
-python run_wsi_inference.py \
-  --data_path /NAS/yzy/project/tcga_luad_svs/21865061-aadd-4bbf-94c7-c6fe3adf08a3/TCGA-55-8614-01Z-00-DX1.043DE2B5-A453-4570-8830-99170450658C.svs \
-  --model $PWD/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
-  --output_dir $PWD/test_wsi5 --save_csv --batch_size 4 --num_workers 38 --max_memory 10000
-  
-  
-python summarize_tme_features.py \
-  --model_res_path /NAS/yzy/software/hd_wsi-master/WSI/TCGA-ZS-A9CG-01Z-00-DX1.FEF9A55C-9331-469C-9D13-FCB232136024.pt \
-  --output_dir $PWD/test_wsi5/test
+docker run -it --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus '"device=1"' hd_wsi \
+  --data_path IMC/data/inHouse/svs/l4 \
+  --model hd_wsi/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
+  --output_dir /IMC/res/inHouse_wsi \
+  --save_csv --batch_size 4 --num_workers 38 --max_memory 10000 \
+  --n_patches 100 --patch_size 512 --score_thresh 10 --scale_factor 16
 ```
 
 
-```python
-from tifffile import TiffFile
 
-img_file = "/NAS/yzy/project/tcga_luad_svs/0b3cff7b-bbe2-40ab-aee6-cb0554940eaa/TCGA-05-4244-01Z-00-DX1.d4ff32cd-38cf-40ea-8213-45c2b100ac01.svs"
-with open(img_file, 'rb') as fp:
-    slide = TiffFile(fp)
-```
 
 # Histological Based Nuclei Segmentation and Tumor Microenvironment Characterization Pipeline
 

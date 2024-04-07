@@ -14,6 +14,7 @@ from collections import defaultdict, Counter
 from io import BytesIO
 from itertools import cycle, groupby, product
 from loguru import logger
+from openslide import open_slide
 
 import cv2
 import matplotlib.colors
@@ -34,6 +35,7 @@ from pycocotools import mask as mask_utils
 from skimage.color import rgb2hsv, hsv2rgb
 from skimage.measure._regionprops import RegionProperties
 from tifffile import TiffFile
+from kfb import TSlide
 
 # IMAGE_NET_MEAN_TF = np.array([123.68, 116.779, 103.939])
 # IMAGE_NET_STD_TF = 1.0
@@ -1173,6 +1175,8 @@ def rgba2rgb(img, background=(0, 0, 0), binary_alpha=False):
     """
     if img.ndim < 3 or img.shape[-1] < 4:
         return img
+
+    print("?")
     alpha_channel = img[..., -1:]
     if binary_alpha:
         res = img[..., :-1] & alpha_channel
@@ -2461,44 +2465,61 @@ class Slide(object):
         self.page_indices = []
         self.level_dims = []
         self.level_downsamples = []
+        self.slide = None
 
         logger.info(f"Loading slide: {self.img_file}")
-        with open(self.img_file, 'rb') as fp:
-            slide = TiffFile(fp)
-            self.description = slide.pages[0].description
 
-            # magnification
-            val = re.findall(r'\|((?i:AppMag)|(?i:magnitude)) = (?P<mag>[\d.]+)', self.description)
-            self.magnitude = float(val[0][1]) if val else None
-            if self.magnitude is None:
-                logger.warning("Didn't find magnitude in description.")
+        if self.img_file.endswith(".kfb"):
+            self.slide = TSlide(self.img_file)
 
-            # mpp
-            val = re.findall(r'\|((?i:MPP)) = (?P<mpp>[\d.]+)', self.description)
-            self.mpp = float(val[0][1]) if val else None
-            if verbose and self.mpp is None:
-                logger.warning("Didn't find mpp in description.")
-
-            ## level_dims consistent with open_slide: (w, h), (OriginalHeight, OriginalWidth)
-            level_dims, scales, page_indices = [(slide.pages[0].shape[1], slide.pages[0].shape[0])], [1.0], [0]
-            for page_idx, page in enumerate(slide.pages[1:], 1):
-                if 'label' in page.description or 'macro' in page.description:
-                    continue
-                if page.tilewidth == 0 or page.tilelength == 0:
-                    continue
-                h, w = page.shape[0], page.shape[1]
-                if round(level_dims[0][0]/w) == round(level_dims[0][1]/h):
-                    level_dims.append((w, h))
-                    scales.append(level_dims[0][0]/w)
-                    page_indices.append(page_idx)
-
-            order = sorted(range(len(scales)), key=lambda x: scales[x])
-            self.page_indices = [page_indices[idx] for idx in order]
-            self.level_dims = [level_dims[idx] for idx in order]
-            self.level_downsamples = [scales[idx] for idx in order]
+            # properties
+            self.description = dict(self.slide.properties)
+            self.magnitude = 40
+            self.mpp = float(self.slide.properties.get('openslide.mpp-t'))
+            self.page_indices = list(range(len(self.slide.level_dimensions)))
+            self.level_dims = self.slide.level_dimensions
+            self.level_downsamples = self.slide.level_downsamples
             self.n_levels = len(self.level_downsamples)
 
-        ## load annotations
+        else:
+            with open(self.img_file, 'rb') as fp:
+                slide = TiffFile(fp)
+                self.description = slide.pages[0].description
+
+                # magnification
+                val = re.findall(r'\|((?i:AppMag)|(?i:magnitude)) = (?P<mag>[\d.]+)', self.description)
+                self.magnitude = float(val[0][1]) if val else None
+
+                # mpp
+                val = re.findall(r'\|((?i:MPP)) = (?P<mpp>[\d.]+)', self.description)
+                self.mpp = float(val[0][1]) if val else None
+
+                # level_dims consistent with open_slide: (w, h), (OriginalHeight, OriginalWidth)
+                level_dims, scales, page_indices = [(slide.pages[0].shape[1], slide.pages[0].shape[0])], [1.0], [0]
+                for page_idx, page in enumerate(slide.pages[1:], 1):
+                    if 'label' in page.description or 'macro' in page.description:
+                        continue
+                    if page.tilewidth == 0 or page.tilelength == 0:
+                        continue
+                    h, w = page.shape[0], page.shape[1]
+                    if round(level_dims[0][0]/w) == round(level_dims[0][1]/h):
+                        level_dims.append((w, h))
+                        scales.append(level_dims[0][0]/w)
+                        page_indices.append(page_idx)
+
+                order = sorted(range(len(scales)), key=lambda x: scales[x])
+                self.page_indices = [page_indices[idx] for idx in order]
+                self.level_dims = [level_dims[idx] for idx in order]
+                self.level_downsamples = [scales[idx] for idx in order]
+                self.n_levels = len(self.level_downsamples)
+
+        if self.magnitude is None:
+            logger.warning("Didn't find magnitude in description.")
+
+        if verbose and self.mpp is None:
+            logger.warning("Didn't find mpp in description.")
+
+        # load annotations
         self.xml_tree = None
         self.annotations = None
         if ann_file is not None:
@@ -2528,23 +2549,26 @@ class Slide(object):
             'description': self.description,
         }
 
-    def attach_reader(self, fh, engine='openslide'):
-        ## precalculate some args for read_region
-        if engine == 'openslide':
+    def attach_reader(self, ):
+        # precalculate some args for read_region
+        if self.img_file.endswith(".svs") or self.img_file.endswith(".kfb"):
             # N = len(fh.level_dimensions)
             # dims = [_ for _ in fh.level_dimensions]
             # self._osr_cfg = {'n_levels': N, 'level_dims': dims, 'level_downsamples': scales,}
+            fh = open_slide(self.img_file) if self.img_file.endswith(".svs") else self.slide
             levels = [fh.get_best_level_for_downsample(x + 1e-2) 
                       for x in self.level_downsamples]
             scales = [self.level_downsamples[lvl] / fh.level_downsamples[osr_level] 
                       for lvl, osr_level in enumerate(levels)]
             self._osr_map = {'levels': levels, 'scales': scales,}
-        elif engine == 'tifffile':
+            self.fh = fh
+            engine = 'openslide' if self.img_file.endswith(".svs") else "kfb"
+        elif self.img_file.endswith(".tif") or self.img_file.endswith(".tiff"):
             self._osr_map = {}
+            engine = 'tiffile'
         else:
             raise ValueError(f"Engine: {self.engine} must be one from ['openslide', 'tiffile'].")
-        
-        self.fh = fh
+
         self.engine = engine
         
         return self
@@ -2611,7 +2635,7 @@ class Slide(object):
             return self.get_page(level)
         
         x0, y0, w, h = x
-        if self.engine == 'openslide':
+        if self.engine in ['openslide', 'kfb']:
             scale = self.level_downsamples[level]
             osr_scale = self._osr_map['scales'][level]
             osr_level = self._osr_map['levels'][level]
@@ -2636,10 +2660,13 @@ class Slide(object):
         return self.fh.read_region((x0, y0), level, (w, h))
 
     def get_page(self, level=0):
-        with open(self.img_file, 'rb') as fp:
-            fh = TiffFile(fp)
-            tiff_page_idx = self.page_indices[level] % len(fh.pages)
-            return fh.pages[tiff_page_idx].asarray()
+        if self.slide is not None:
+            return self.slide.read_whole_image(level)
+        else:
+            with open(self.img_file, 'rb') as fp:
+                fh = TiffFile(fp)
+                tiff_page_idx = self.page_indices[level] % len(fh.pages)
+                return fh.pages[tiff_page_idx].asarray()
 
     def thumbnail(self, image_size=None, memory_limit=None):
         """ return a thumbnail in PIL image format.

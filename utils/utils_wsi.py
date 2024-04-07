@@ -24,6 +24,7 @@ import matplotlib
 import tifffile
 from collections import deque
 from matplotlib import pyplot as plt
+
 from .utils_image import get_dzi, img_as, pad, Mask, overlay_detections
 
 
@@ -89,7 +90,7 @@ def collate_fn(batch):
 
 def is_image_file(x):
     ext = os.path.splitext(x)[1].lower()
-    return not x.startswith('.') and ext in ['.png', '.jpeg', '.jpg', '.tif', '.tiff']
+    return not x.startswith('.') and ext in ['.png', '.jpeg', '.jpg', '.tif', '.tiff', '.kfb']
 
 
 def folder_iterator(folder, keep_fn=None):

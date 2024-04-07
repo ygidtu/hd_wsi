@@ -6,7 +6,7 @@ authors = ["ygidtu <ygidtu@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.10,<3.13"
 pandas = "^2.1.1"
 pillow = "^10.1.0"
 seaborn = "^0.13.0"
@@ -28,10 +28,13 @@ imagecodecs = "^2023.9.18"
 click = "^8.1.7"
 loguru = "^0.7.2"
 tqdm = "^4.66.1"
+kfb = {git = "ssh://git@github.com/ygidtu/WSI-SDK.git", develop = true}
+pyyaml = "^6.0.1"
+
 
 [tool.poetry.group.torch.dependencies]
 torch = "^2.1.0"
-torchvision = "^0.16.0"
+torchvision = "^0.17.2"
 
 [build-system]
 requires = ["poetry-core"]
@@ -44,4 +47,9 @@ priority = "primary"
 
 [[tool.poetry.source]]
 name = "PyPI"
+priority = "supplemental"
+
+[[tool.poetry.source]]
+name = "Torch"
+url = "https://download.pytorch.org/whl/cu117"
 priority = "supplemental"

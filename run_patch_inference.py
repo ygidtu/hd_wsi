@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import math
+import numpy as np
 import os
 import time
 
 import click
+from kfb import TSlide
 import skimage.io
 import torch
 import torch.nn.functional as F
@@ -24,7 +26,7 @@ def analyze_one_patch(img, model, dataset_configs, mpp=None, compute_masks=True,
     model_par0 = next(model.parameters())
     img = img.to(model_par0.device, model_par0.dtype, non_blocking=True)
 
-    ## rescale
+    # rescale
     if mpp is not None and mpp != dataset_configs['mpp']:
         scale_factor = dataset_configs['mpp'] / mpp
         img_rescale = F.interpolate(img[None], scale_factor=scale_factor, mode='bilinear', align_corners=False)[0]
@@ -33,7 +35,7 @@ def analyze_one_patch(img, model, dataset_configs, mpp=None, compute_masks=True,
         img_rescale = img
     h_rescale, w_rescale = img_rescale.shape[1:]
 
-    ## pad to 64
+    # pad to 64
     if h_rescale % 64 != 0 or w_rescale % 64 != 0:
         input_h, input_w = math.ceil(h_rescale / 64) * 64, math.ceil(w_rescale / 64) * 64
         pad_width = get_pad_width((h_rescale, w_rescale), (input_h, input_w), pos='center', stride=1)
@@ -44,11 +46,13 @@ def analyze_one_patch(img, model, dataset_configs, mpp=None, compute_masks=True,
         inputs = img_rescale[None]
 
     t0 = time.time()
+
+    print(compute_masks)
     with torch.no_grad():
         outputs = model(inputs, compute_masks=compute_masks)[1]
         res = outputs[0]['det']
 
-    ## unpad and scale back to original coords
+    # unpad and scale back to original coords
     res['boxes'] -= res['boxes'].new([pad_width[1][0], pad_width[0][0], pad_width[1][0], pad_width[0][0]])
     res['boxes'] /= scale_factor
     res['labels'] = res['labels'].to(torch.int32)
@@ -93,7 +97,7 @@ def patch(data_path, meta_info, model, output_dir, device, mpp, box_only, export
         model.float()
     model.eval()
     model.to(device)
-    logger.info(f"Load model: {model} to {device} (nms: {model.headers.det.nms_params}")
+    logger.info(f"Load model to {device} (nms: {model.headers.det.nms_params}")
 
     meta_info = load_cfg(meta_info)
     dataset_configs = {'mpp': CONFIGS.DEFAULT_MPP, **CONFIGS.DATASETS, **meta_info}
@@ -119,9 +123,21 @@ def patch(data_path, meta_info, model, output_dir, device, mpp, box_only, export
         image_id, ext = os.path.splitext(os.path.basename(patch_path))
         # run inference
         # img = read_image(patch_path).type(torch.float32) / 255
-        raw_img = rgba2rgb(skimage.io.imread(patch_path))
-        # raw_img = cv2.resize(raw_img, (500, 500), interpolation=cv2.INTER_LINEAR)
+
+        if ext.endswith(".kfb"):
+            raw_img = TSlide(patch_path).read_whole_image(2)
+            if raw_img.ndim > 2:
+                if raw_img.shape[-1] not in (3, 4) and raw_img.shape[-3] in (3, 4):
+                    raw_img = np.swapaxes(raw_img, -1, -3)
+                    raw_img = np.swapaxes(raw_img, -2, -3)
+            raw_img = rgba2rgb(raw_img)
+        else:
+            print("?")
+            raw_img = rgba2rgb(skimage.io.imread(patch_path))
+
         img = ToTensor()(raw_img)
+        # img = img.type(torch.IntTensor)
+        # print(img)
         outputs = analyze_one_patch(
             img, model, dataset_configs, mpp=mpp,
             compute_masks=not box_only,
