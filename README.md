@@ -19,13 +19,21 @@ docker run -it --rm -v /NAS:/NAS --user $(id -u):$(id -g) --gpus '"device=1"' hd
   --model hd_wsi/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
   --output_dir /IMC/res/inHouse_wsi \
   --save_csv --batch_size 4 --num_workers 38 --max_memory 10000 \
-  --n_patches 100 --patch_size 512 --score_thresh 10 --scale_factor 16
+  --n_patches 100 --patch_size 512 --score_thresh 10 --scale_factor 16   
+
+
+docker run -it --rm -v /NAS:/NAS --user $(id -u):$(id -g) hd_wsi \
+  --data_path IMC/data/CPTAC/LUAD
+  --model hd_wsi/selected_models/benchmark_lung/lung_best.float16.torchscript.pt \
+  --output_dir /IMC/res/CPTAC/LUAD/wsi \
+  --save_csv --batch_size 4 --num_workers 38 --max_memory 10000 \
+  --n_patches 100 --patch_size 512 --score_thresh 10 --scale_factor 16   
 ```
 
 
 
 
-# Histological Based Nuclei Segmentation and Tumor Microenvironment Characterization Pipeline
+# Histological Based Nuclei Segmentation and Tumor Micro-environment Characterization Pipeline
 
 
 ## Introduction

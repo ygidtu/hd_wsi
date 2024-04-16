@@ -682,9 +682,9 @@ name = "kfb"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = "^3.10"
+python-versions = "^3.9"
 files = []
-develop = true
+develop = false
 
 [package.dependencies]
 opencv-python = "^4.9.0.80"
@@ -693,9 +693,9 @@ tqdm = "^4.66.2"
 
 [package.source]
 type = "git"
-url = "ssh://git@github.com/ygidtu/WSI-SDK.git"
+url = "https://github.com/ygidtu/WSI-SDK.git"
 reference = "HEAD"
-resolved_reference = "4e5122212c1411d6597e5cd927179b5f593bf23c"
+resolved_reference = "dbea9a054fb14b5cdda988af1494f9f9e93bc738"
 
 [[package]]
 name = "kiwisolver"
@@ -2347,4 +2347,4 @@ reference = "mirrors"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "92b2419f612a2d59b75bbc194830ac2dcb3d7342405a21fa9d3fcadbdfd65c35"
+content-hash = "62068c3012141bb5285a1142db8ee1477080a054c82df61755614db02fc70729"

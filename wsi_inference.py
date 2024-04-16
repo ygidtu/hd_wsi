@@ -116,53 +116,56 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
     logger.info(f"Outputs: {output_dir}")
 
     for file_idx, rel_path, slide_file in slide_files:
-        output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        slide_id = os.path.splitext(os.path.basename(slide_file))[0]
-        res_file = os.path.join(output_dir, f"{slide_id}.pt")
-        res_file_masks = os.path.join(output_dir, f"{slide_id}.masks.pt")
+        try:
+            output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            slide_id = os.path.splitext(os.path.basename(slide_file))[0]
+            res_file = os.path.join(output_dir, f"{slide_id}.pt")
+            res_file_masks = os.path.join(output_dir, f"{slide_id}.masks.pt")
 
-        if not os.path.exists(res_file):
-            t0 = time.time()
-            try:
-                osr = Slide(*get_slide_and_ann_file(slide_file))
-                roi_masks = generate_roi_masks(osr, roi)
-                dataset = WholeSlideDataset(osr, masks=roi_masks, processor=None, **dataset_configs)
-                osr.attach_reader()
-                logger.info(dataset.info())
-            except Exception as e:
-                logger.error(f"Failed to create slide dataset for: {slide_file}.")
-                logger.error(e)
-                continue
-            logger.info(f"Loading slide: {time.time() - t0} s")
-            outputs = analyze_one_slide(model, dataset,
-                                        compute_masks=not box_only,
-                                        batch_size=batch_size,
-                                        n_workers=num_workers,
-                                        nms_params={},
-                                        device=device,
-                                        export_masks=res_file_masks,
-                                        max_mem=max_memory,
-                                        )
-            outputs['meta_info'] = meta_info
-            outputs['slide_info'] = dataset.slide.info()
-            outputs['slide_size'] = dataset.slide_size
-            outputs['model'] = model
-            outputs['rois'] = dataset.masks
+            if not os.path.exists(res_file):
+                t0 = time.time()
+                try:
+                    osr = Slide(*get_slide_and_ann_file(slide_file))
+                    roi_masks = generate_roi_masks(osr, roi)
+                    dataset = WholeSlideDataset(osr, masks=roi_masks, processor=None, **dataset_configs)
+                    osr.attach_reader()
+                    logger.info(dataset.info())
+                except Exception as e:
+                    logger.error(f"Failed to create slide dataset for: {slide_file}.")
+                    logger.error(e)
+                    continue
+                logger.info(f"Loading slide: {time.time() - t0} s")
+                outputs = analyze_one_slide(model, dataset,
+                                            compute_masks=not box_only,
+                                            batch_size=batch_size,
+                                            n_workers=num_workers,
+                                            nms_params={},
+                                            device=device,
+                                            export_masks=res_file_masks,
+                                            max_mem=max_memory,
+                                            )
+                outputs['meta_info'] = meta_info
+                outputs['slide_info'] = dataset.slide.info()
+                outputs['slide_size'] = dataset.slide_size
+                outputs['model'] = model
+                outputs['rois'] = dataset.masks
 
-            # we save nuclei masks in a separate file to speed up features extraction without mask.
-            if 'masks' in outputs['cell_stats']:
-                output_masks = outputs['cell_stats']['masks']
-                del outputs['cell_stats']['masks']
-                torch.save(output_masks, res_file_masks)
-                save_predicted_models(res_file, outputs)
-                outputs['cell_stats']['masks'] = output_masks
+                # we save nuclei masks in a separate file to speed up features extraction without mask.
+                if 'masks' in outputs['cell_stats']:
+                    output_masks = outputs['cell_stats']['masks']
+                    del outputs['cell_stats']['masks']
+                    torch.save(output_masks, res_file_masks)
+                    save_predicted_models(res_file, outputs)
+                    outputs['cell_stats']['masks'] = output_masks
+                else:
+                    save_predicted_models(res_file, outputs)
+                osr.detach_reader(close=True)
+                logger.info(f"Total time: {time.time() - t0} s")
             else:
-                save_predicted_models(res_file, outputs)
-            osr.detach_reader(close=True)
-            logger.info(f"Total time: {time.time() - t0} s")
-        else:
+                outputs = {}
+        except Exception as err:
             outputs = {}
 
         if save_img or save_csv:

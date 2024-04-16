@@ -28,11 +28,8 @@ imagecodecs = "^2023.9.18"
 click = "^8.1.7"
 loguru = "^0.7.2"
 tqdm = "^4.66.1"
-kfb = {git = "ssh://git@github.com/ygidtu/WSI-SDK.git", develop = true}
+kfb = {git = "https://github.com/ygidtu/WSI-SDK.git"}
 pyyaml = "^6.0.1"
-
-
-[tool.poetry.group.torch.dependencies]
 torch = "^2.1.0"
 torchvision = "^0.17.2"
 
@@ -47,9 +44,4 @@ priority = "primary"
 
 [[tool.poetry.source]]
 name = "PyPI"
-priority = "supplemental"
-
-[[tool.poetry.source]]
-name = "Torch"
-url = "https://download.pytorch.org/whl/cu117"
 priority = "supplemental"
