@@ -7,7 +7,9 @@ from collections import defaultdict
 
 import psutil
 import torch
+
 from loguru import logger
+from tqdm import tqdm
 
 import configs as CONFIGS
 from utils.utils_image import Slide
@@ -79,7 +81,7 @@ def analyze_one_slide(model, dataset, batch_size=64, n_workers=64,
     if masks:
         res['masks'] = torch.cat(masks)
     t1 = time.time()
-    logger.info(f"{t1 - t0} s")
+    # logger.info(f"{t1 - t0} s")
 
     return {'cell_stats': res, 'inference_time': t1 - t0}
 
@@ -115,14 +117,14 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
     logger.info(f"Inputs: {data_path} ({len(slide_files)} files observed). ")
     logger.info(f"Outputs: {output_dir}")
 
-    for file_idx, rel_path, slide_file in slide_files:
+    for file_idx, rel_path, slide_file in tqdm(slide_files):
         try:
-            output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
+            output_dir1 = os.path.join(output_dir, os.path.dirname(rel_path))
+            if not os.path.exists(output_dir1):
+                os.makedirs(output_dir1)
             slide_id = os.path.splitext(os.path.basename(slide_file))[0]
-            res_file = os.path.join(output_dir, f"{slide_id}.pt")
-            res_file_masks = os.path.join(output_dir, f"{slide_id}.masks.pt")
+            res_file = os.path.join(output_dir1, f"{slide_id}.pt")
+            res_file_masks = os.path.join(output_dir1, f"{slide_id}.masks.pt")
 
             if not os.path.exists(res_file):
                 t0 = time.time()
@@ -163,71 +165,72 @@ def wsi(model, device, meta_info, data_path, output_dir, box_only, num_workers,
                     save_predicted_models(res_file, outputs)
                 osr.detach_reader(close=True)
                 logger.info(f"Total time: {time.time() - t0} s")
-            else:
-                outputs = {}
         except Exception as err:
-            outputs = {}
+            logger.error(err)
+            continue
 
         if save_img or save_csv:
-            if not outputs:
+            try:
                 outputs = load_predicted_models(res_file)
-            if box_only:
-                param_masks = None
-            else:
-                if 'masks' in outputs['cell_stats']:
-                    param_masks = outputs['cell_stats']['masks']
-                elif os.path.exists(res_file_masks):
-                    param_masks = torch.load(res_file_masks)
+                if box_only:
+                    param_masks = None
                 else:
-                    param_masks = res_file_masks
+                    if 'masks' in outputs['cell_stats']:
+                        param_masks = outputs['cell_stats']['masks']
+                    elif os.path.exists(res_file_masks):
+                        param_masks = torch.load(res_file_masks)
+                    else:
+                        param_masks = res_file_masks
+            except FileNotFoundError:
+                continue
 
-        if save_img:
-            img_file = os.path.join(output_dir, f"{slide_id}.tiff")
-            if not os.path.exists(img_file):
-                logger.info(f"Exporting result to image: ", end="")
-                t0 = time.time()
+            if save_img:
+                img_file = os.path.join(output_dir1, f"{slide_id}.tiff")
+                if not os.path.exists(img_file):
+                    logger.info(f"Exporting result to image: ", end="")
+                    t0 = time.time()
 
-                object_iterator = ObjectIterator(
-                    boxes=outputs['cell_stats']['boxes'],
-                    labels=outputs['cell_stats']['labels'],
-                    scores=outputs['cell_stats']['scores'],
-                    masks=param_masks,
-                )
-                mask = export_detections_to_image(
-                    object_iterator, outputs['slide_size'],
-                    labels_color=outputs['meta_info']['labels_color'],
-                    save_masks=not box_only, border=3,
-                    alpha=1.0 if box_only else CONFIGS.MASK_ALPHA,
-                )
-                # Image.fromarray(mask).save(img_file)
-                wsi_imwrite(mask, img_file, outputs['slide_info'], CONFIGS.TIFF_PARAMS,
-                            model=outputs['model'],
-                            )
-                logger.info(f"{time.time() - t0} s")
+                    object_iterator = ObjectIterator(
+                        boxes=outputs['cell_stats']['boxes'],
+                        labels=outputs['cell_stats']['labels'],
+                        scores=outputs['cell_stats']['scores'],
+                        masks=param_masks,
+                    )
+                    mask = export_detections_to_image(
+                        object_iterator, outputs['slide_size'],
+                        labels_color=outputs['meta_info']['labels_color'],
+                        save_masks=not box_only, border=3,
+                        alpha=1.0 if box_only else CONFIGS.MASK_ALPHA,
+                    )
+                    # Image.fromarray(mask).save(img_file)
+                    wsi_imwrite(mask, img_file, outputs['slide_info'], CONFIGS.TIFF_PARAMS,
+                                model=outputs['model'],
+                                )
+                    logger.info(f"{time.time() - t0} s")
 
-        if save_csv:
-            csv_file = os.path.join(output_dir, f"{slide_id}.csv")
-            if not os.path.exists(csv_file):
-                logger.info(f"Exporting result to csv: ", end="")
-                t0 = time.time()
+            if save_csv:
+                csv_file = os.path.join(output_dir1, f"{slide_id}.csv")
+                if not os.path.exists(csv_file):
+                    logger.info(f"Exporting result to csv: ", end="")
+                    t0 = time.time()
 
-                if export_text and 'labels_text' in outputs['meta_info']:
-                    labels_text = outputs['meta_info']['labels_text']
-                else:
-                    labels_text = None
-                object_iterator = ObjectIterator(
-                    boxes=outputs['cell_stats']['boxes'],
-                    labels=outputs['cell_stats']['labels'],
-                    scores=outputs['cell_stats']['scores'],
-                    masks=param_masks,
-                )
-                df = export_detections_to_table(
-                    object_iterator,
-                    labels_text=labels_text,
-                    save_masks=(not box_only) and export_mask,
-                )
-                df.to_csv(csv_file, index=False)
-                logger.info(f"{time.time() - t0} s")
+                    if export_text and 'labels_text' in outputs['meta_info']:
+                        labels_text = outputs['meta_info']['labels_text']
+                    else:
+                        labels_text = None
+                    object_iterator = ObjectIterator(
+                        boxes=outputs['cell_stats']['boxes'],
+                        labels=outputs['cell_stats']['labels'],
+                        scores=outputs['cell_stats']['scores'],
+                        masks=param_masks,
+                    )
+                    df = export_detections_to_table(
+                        object_iterator,
+                        labels_text=labels_text,
+                        save_masks=(not box_only) and export_mask,
+                    )
+                    df.to_csv(csv_file, index=False)
+                    logger.info(f"{time.time() - t0} s")
 
 
 if __name__ == '__main__':

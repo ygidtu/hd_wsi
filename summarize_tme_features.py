@@ -4,7 +4,8 @@ import os
 import pickle
 import time
 from glob import glob
-
+import pandas as pd
+from loguru import logger
 from tqdm import tqdm
 
 from utils.utils_features import *
@@ -40,7 +41,7 @@ def summarize(
     device = torch.device(device)
 
     outputs = {}
-    for file_idx, rel_path, res_path in res_files:
+    for file_idx, rel_path, res_path in tqdm(res_files):
         output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -76,7 +77,6 @@ def summarize(
                 mpp_scale = slide_info['mpp'] / default_mpp
                 slide_size = int(math.ceil(slide_size[0] * mpp_scale)), int(math.ceil(slide_size[1] * mpp_scale))
 
-                logger.info("filter out inf or nan from boxes")
                 # res_nuclei["boxes"] = filter_out_inf(res_nuclei["boxes"])
                 # remove boxes with inf
                 kept_idx = [not any(x == torch.inf) for x in tqdm(res_nuclei["boxes"])]

@@ -6,10 +6,14 @@ u"""
 import os
 
 import click
-
+from loguru import logger
+from tqdm import tqdm
 from wsi_inference import wsi
 from summarize_tme_features import summarize
 
+
+logger.remove()
+logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True)
 
 os.environ["YOLOv5_VERBOSE"] = 'False'
 # logger.remove()
@@ -59,11 +63,12 @@ DEFAULT_MPP = 0.25
 @click.option('--nms_thresh', default=0.015, type=float, help='Maximum overlapping between patches.')
 @click.option('--score_thresh', default=160, type=float, help='Minimum coverage of tumor region.')
 @click.option('--seed', default=SEED, type=int, help='Random seed to use.')
+@click.option('--skip-wsi', is_flag=True, help='Only summarise')
 def main(
         model, device, meta_info, data_path, output_dir, box_only, num_workers,
         max_memory, save_img, save_csv, export_text, export_mask, batch_size, roi, seed,
         scale_factor, default_mpp, n_classes, n_patches, patch_size, max_dist, nms_thresh, score_thresh,
-        save_nuclei, slides_mapping_file
+        save_nuclei, slides_mapping_file, skip_wsi
 ):
 
     u"""
@@ -71,13 +76,14 @@ def main(
     :return:
     """
 
-    wsi(
-        model, device, meta_info, data_path, output_dir, box_only, num_workers,
-        max_memory, save_img, save_csv, export_text, export_mask, batch_size, roi
-    )
+    if not skip_wsi:
+        wsi(
+            model, device, meta_info, data_path, os.path.join(output_dir, "wsi"), box_only, num_workers,
+            max_memory, save_img, save_csv, export_text, export_mask, batch_size, roi
+        )
 
     summarize(
-        os.path.join(output_dir), os.path.join(output_dir, "summarized"), data_path,
+        os.path.join(output_dir, "wsi"), os.path.join(output_dir, "summarized"), data_path,
         slides_mapping_file, scale_factor, default_mpp,
         n_classes, n_patches, patch_size, max_dist, nms_thresh, score_thresh,
         device, num_workers, box_only, save_nuclei, save_img, seed,
