@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import gzip
 import os
 import pickle
 import time
 from glob import glob
-import pandas as pd
-from loguru import logger
 from tqdm import tqdm
 
 from utils.utils_features import *
@@ -178,7 +177,7 @@ def summarize(
                     skimage.io.imsave(save_path, (roi_mask * 255.0).astype(np.uint8))
                     logger.info(f"{time.time() - t0} s. ")
 
-            with open(pkl_filename, 'wb') as f:  # save results to pkl
+            with gzip.open(pkl_filename + ".gz", 'wb') as f:  # save results to pkl
                 pickle.dump(output, f)
 
         # register pkl_file to slide_id
@@ -193,7 +192,7 @@ def summarize(
     # Summarize results based on patient_id
     bfs = {}
     for slide_id, pkl_filename in outputs.items():
-        with open(pkl_filename, 'rb') as f:
+        with gzip.open(pkl_filename + ".gz", 'rb') as f:
             output = pickle.load(f)
         bfs[slide_id] = output['base_features']
     df = summarize_normalized_features(bfs, slide_pat_map=slide_pat_map)

@@ -30,10 +30,11 @@ loguru = "^0.7.2"
 tqdm = "^4.66.1"
 kfb = {git = "https://github.com/ygidtu/WSI-SDK.git"}
 pyyaml = "^6.0.1"
+numpy = "<2"
 
 [tool.poetry.group.torch.dependencies]
-torch = "2.1.0"
-torchvision = "0.16.0"
+torch = "*"
+torchvision = "*"
 
 [build-system]
 requires = ["poetry-core"]
@@ -47,3 +48,7 @@ priority = "primary"
 [[tool.poetry.source]]
 name = "PyPI"
 priority = "supplemental"
+
+
+
+

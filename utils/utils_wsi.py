@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import gzip
 import os
 import math
 import pickle
@@ -271,7 +272,7 @@ class WholeSlideDataset(torch.utils.data.Dataset):
 
     def export(self, output_folder, save_thumbnail=False, save_mask=False):
         data_file_name = os.path.join(output_folder, f'{self.slide_id}.pkl')
-        with open(data_file_name, 'wb') as f:
+        with gzip.open(data_file_name, 'wb') as f:
             info = {
                 'patch_size': self.patch_size, 'padding': self.padding, 
                 'patches': self.images, 'kwargs': self.kwargs,
@@ -298,7 +299,7 @@ class WholeSlideDataset(torch.utils.data.Dataset):
         mask_file_name = os.path.join(folder, f'{self.slide_id}_mask.png')
 
         if os.path.exists(data_file_name):
-            with open(data_file_name, 'rb') as f:
+            with gzip.open(data_file_name, 'rb') as f:
                 self.images = pickle.load(f)
 
         if os.path.exists(mask_file_name):
